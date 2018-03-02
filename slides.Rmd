@@ -1,0 +1,724 @@
+---
+title: "Doing Weighted Analyses of Survey Data"
+author: "Jacob Long"
+date: "3/2/2018"
+output: 
+  beamer_presentation:
+    theme: "metropolis"
+    keep_tex: false
+    # colortheme: "beaver"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include = TRUE, message = FALSE,
+                      warning = FALSE, collapse = TRUE, comment = "##")
+```
+
+## The data
+
+- AARP December 2016 Brain Health Survey
+- Target population: Americans older than 40
+- Web survey administered by GfK/Knowledge Networks
+- N = 2,585
+    - 1,535 general population sample (age > 40)
+    - 341 Hispanic oversample (conducted in Spanish as needed)
+    - 399 Black oversample
+    - 310 Asian oversample
+
+Available at: http://go.osu.edu/Dec16AARP_Roper
+
+Get the code for these slides at: 
+https://github.com/jacob-long/survey-analysis-demo
+
+## Key variables
+
+- `cog_fun`: A scale self-assessment of respondent's cognitive functioning.
+    - I've coded it such that each item has values of 1 (decreased a lot),
+    2 (decreased a little), or 3 (stayed the same)
+- `engagement`: Index of social activities the respondent engages in and how 
+often (going to church, go dancing, etc.)
+- `watch_tv`, `surf_net`, and `use_facebook`: Frequency of communication 
+activities
+- `age`, `female`, `educ`, `black`, `hispanic`: Demographics
+
+I'm sparing you the full recoding logic, etc.
+
+## Weights
+
+3 weighting variables provided:
+
+- `WEIGHT1` for analyzing general population sample
+    - $\sum_i^{N_1}{w_{1i}} = 1535$
+- `WEIGHT2` for analyzing race subgroups
+    - $\sum_i^{N_2}{w_{2i}} = 1370$
+
+<!-- \begin{alertblock} -->
+\metroset{block=fill}
+\begin{exampleblock}{Note}
+$\sum_i^{N_1} w_{1i} + \sum_i^{N_2} w_{2i} \neq 2585$ 
+because the general population includes non-whites who are 
+given weights for the sub-group analyses.
+\end{exampleblock}
+<!-- \end{alertblock} -->
+
+- `WEIGHT3` for analyzing all cases
+    - $\sum_i^{N_3}{w_{3i}} = 2585$
+    
+# What weights do
+
+## Weighted mean
+
+Where $x$ is a vector of numbers ($\{x_1, x_2, ..., x_n\}$)
+
+Unweighted:
+
+$$\bar{x} = \frac{1}{n} \sum_{i = 1}^n{x_i}$$ 
+
+Weighted:
+
+Where $w$ is a vector of weights ($\{w_1, w_2, ..., w_n\}$)
+
+$$\bar{x}_w = \frac{1}{\sum_{i = 1}^n{w_i}} \sum_{i = 1}^n{x_i w_i}$$ 
+
+Note that if, as is typical, the sum of weights is the number of cases, then
+$\sum_{i = 1}^n{w_i} = n$.
+
+<!-- And the mean calculation is no different than the unweighted mean except -->
+<!-- for multiplying $x$ by $w$. -->
+
+## Weighted variance
+
+Unweighted:
+
+$$Var(x) = \frac{1}{n} \sum_{i = 1}^n{(x_i - \bar{x})^2}$$ 
+
+Weighted: 
+
+$$Var_w(x) = \frac{1}{\sum_{i = 1}^n{w_i}} \sum_{i = 1}^n{w_i(x_i - \bar{x}_w)^2}$$
+
+## Design effects
+
+Normally, the standard error is:
+
+$$SE = \frac{\sqrt{Var(x)}}{\sqrt{n}}$$
+
+Just plugging in our weighted variance estimate for **standard errors** would 
+be inappropriate because this is not a simple random sample.
+
+Kish (1965) defined the *design effect* as the ratio of variance you get in
+a complex sample to the variance you get in a simple random sample. One way
+to approximate this using your weights is to calculate the "effective sample 
+size" (also Kish, 1965).
+
+## Effective N
+
+$$ N_{eff} = \frac{(\sum_{i = 1}^n{w_i})^2}{\sum_{i = 1}^n{w_i}^2} $$
+
+and $$DEff = \frac{N_{actual}}{N_{eff}}$$
+
+When all weights = 1 (as with simple random samples with random nonresponse), 
+$N_{eff} = N_{actual}$. 
+
+In our data, $N_{eff}$ = 1794, so the design effect is 1.44. For simple means,
+you can get the proper standard errors by substituting $N_{eff}$ in the SE
+calculation:
+
+$$SE = \frac{\sqrt{Var_w{}(x)}}{\sqrt{N_{eff}}}$$
+
+<!-- ## Effective N -->
+
+<!-- \metroset{block=fill} -->
+<!-- \begin{exampleblock}{SPSS hack} -->
+
+<!-- If you multiply the weights by $N_{eff}^{-1}$, you will -->
+<!-- get approximately correct standard errors for linear calculations using -->
+<!-- `WEIGHT BY`. Since SPSS thinks they are frequency weights, SEs are calculated -->
+<!-- based on an assumed total N of $\sum_{i = 1}^{N}{w_i}$, which after this  -->
+<!-- adjustment is equal to $N_{eff}$. -->
+
+<!-- \end{exampleblock} -->
+
+# Software choices
+
+## Software choices
+
+There are several commercial products designed for analysis of complex 
+surveys in particular:
+
+- SUDAAN
+- WesVar
+- Several others that are specific to narrow range of analyses and/or datasets.
+
+General-use statistics programs:
+
+- R
+- Stata
+- SAS (inconsistent support)
+- SPSS (with caveats)
+
+## SPSS
+
+Beware `WEIGHT BY` command! 
+
+- Interpreted as frequency weights
+- Most survey weights we use will be inverse probability weights
+- Estimated standard errors will be wrong, almost always too small
+
+## SPSS Complex Samples
+
+- Paid add-on to SPSS, like AMOS
+- OSU SoC does get this
+- Can be fairly opaque in terms of correct setup
+
+For surveys with single weight, tell SPSS it is a one-stage design sampled
+with replacement. SPSS will save the setup to file.
+
+## Example SPSS setup
+
+```
+CSPLAN ANALYSIS
+  /PLAN FILE='/path/to/file/ex.csaplan'
+  /PLANVARS ANALYSISWEIGHT=WEIGHT3      
+  /SRSESTIMATOR TYPE=WOR
+  /PRINT PLAN
+  /DESIGN 
+  /ESTIMATOR TYPE=WR.
+```
+
+Run this (or just follow the menus under 
+"Analyze" -> Complex Samples" -> "Prepare for Analysis...")
+
+## Available analyses in SPSS
+
+- Descriptives (means, frequencies, crosstabs)
+- OLS (well, WLS) regression
+- Logistic regression
+- Ordinal regression (logit, probit, cloglog, couple other links)
+- Cox regression (simple survival analysis)
+
+## SPSS code snippet
+
+Here's a preview of the SPSS code needed to run the model we'll do later:
+
+```
+CSGLM  cog_fun WITH engagement watch_tv use_facebook 
+surf_net age female hispanic black educ
+  /PLAN FILE='/path/to/file/ex.csaplan'
+  /MODEL engagement watch_tv use_facebook surf_net age 
+  female hispanic  black educ
+  /INTERCEPT INCLUDE=YES SHOW=YES
+  /STATISTICS PARAMETER SE CINTERVAL TTEST
+  /PRINT SUMMARY
+  /TEST TYPE=F PADJUST=LSD
+  /MISSING CLASSMISSING=EXCLUDE
+  /CRITERIA CILEVEL=95.
+```
+
+<!-- Note: If you just follow the defaults given to you via menus, SPSS does not -->
+<!-- give you the regression coefficients, SEs, t-statistics, etc. -->
+
+## R
+
+- `survey` package, available on CRAN
+- Large range of analyses, designs, utilities
+    - All models supported by base `lm` and `glm`, plus ordinal regression
+        - Some others implemented like negative binomial in `sjstats` package
+    - SEM via `lavaan.survey`
+    - Descriptives
+    - Multiple imputation
+    - Weighting procedures via calibration, raking, post-stratification
+- A few quirks that make some procedures different than base R equivalent
+
+## R setup
+
+Read data into R...
+
+```{r echo = TRUE, include = TRUE}
+library(haven)
+raw_data <- read_dta("brain_health.dta")
+```
+
+```{r}
+raw_data <- zap_labels(raw_data)
+```
+
+
+Create a `survey.design` object:
+
+
+```{r}
+### Cognitive functioning variable
+# which column is the first of the series?
+index_start <- which(names(raw_data) == "Q3_1")
+# which is the last?
+index_end <- which(names(raw_data) == "Q3_12")
+# For all those columns, loop through and recode -1 to NA
+raw_data[index_start:index_end] <- 
+  lapply(raw_data[index_start:index_end], function(x) {
+    ifelse(x == -1, NA, x)
+  })
+# For all those columns, loop through and reverse code so 
+# more function is higher
+raw_data[index_start:index_end] <- 
+  lapply(raw_data[index_start:index_end], function(x) {
+    (x * -1) + 6
+  })
+# For all those columns, recode all the "increase" responses to "stay the same"
+raw_data[index_start:index_end] <- 
+  lapply(raw_data[index_start:index_end], function(x) {
+    ifelse(x > 3, 3, x)
+  })
+# The mean of those columns is the cognitive functioning variable
+raw_data$cog_fun <- rowMeans(raw_data[index_start:index_end])
+```
+
+```{r}
+### Create social engagement variable
+# which column is the first of the series?
+index_start <- which(names(raw_data) == "Q18_A")
+# which is the last?
+index_end <- which(names(raw_data) == "Q18_G")
+# For all those columns, loop through and recode -1 to NA
+raw_data[index_start:index_end] <- 
+  lapply(raw_data[index_start:index_end], function(x) {
+    ifelse(x == -1, NA, x)
+  })
+# The mean of all these rows is the engagement variable
+raw_data$engagement <- rowMeans(raw_data[index_start:index_end])
+```
+
+```{r}
+# Media variables
+raw_data$watch_tv <- (raw_data$Q37_1 * -1) + 7
+raw_data$surf_net <- (raw_data$Q37_3 * -1) + 7
+raw_data$use_facebook <- (raw_data$Q37_5 * -1) + 7
+```
+
+```{r}
+# Demographics
+raw_data$age <- raw_data$ppagecat
+raw_data$female <- raw_data$ppgender - 1
+raw_data$hispanic <- as.numeric(raw_data$ppethm == 4)
+raw_data$black <- as.numeric(raw_data$ppethm == 2)
+raw_data$white <- as.numeric(raw_data$ppethm == 1)
+raw_data$educ <- raw_data$ppeducat
+```
+
+```{r echo = TRUE}
+library(survey)
+survey_data <- svydesign(data = raw_data, ids = ~1,
+                         weights = ~WEIGHT3)
+```
+
+In `survey`, instead of indexing variables with `data$variable` syntax, always
+use formula syntax (`~variable`).
+
+`ids = ~1` means we assume independent sampling, if dependent we provide the
+grouping variables to `id =`. 
+
+## Stata
+
+Many built-in abilities in its `svy` suite of utilities (akin to `xt` suite
+for panel data, `st` for survival data).
+
+- Capabilities mostly overlap with R `survey` package
+- After setup, pretty simple to use (just begin command with `svy:`)
+- Many commands initially developed by Senior Mathematical Statistician
+at Bureau of Labor Statistics (he is now Assistant Director for Research and
+Methodology).
+- One type of analysis only available in Stata: Multilevel models with 
+regression weights.
+- One limitation: Uneven support for incorporating weights into plots
+
+## Stata setup
+
+You may use dialogs to set things up.
+
+```
+use "/path/to/file/brain_health.dta"
+svyset _n [pweight=WEIGHT3], vce(linearized)
+```
+
+- `pweight` is what we use for the typical probability weights in survey 
+datasets. 
+- `vce(linearized)` tells Stata we want to use the conventional method for calculating variance
+    - e.g. Huber-White robust estimators for regression
+
+
+# Example analyses
+
+## Means in our data
+
+R:
+
+```{r echo = TRUE, eval = FALSE}
+svymean(~cog_fun, design = survey_data, na.rm = TRUE)
+```
+
+Stata:
+
+```stata
+svy: mean cog_fun engagement
+```
+
+## Means in our data
+
+```{r}
+library(tidyr)
+ld <- gather(raw_data, key ="key", value = "value", -WEIGHT3)
+ld <- ld[ld$key %in% c("cog_fun", "engagement", "use_facebook", "surf_net",
+                    "watch_tv", "black", "hispanic", "educ"),]
+ld$value <- as.numeric(ld$value)
+
+library(dplyr)
+sld <- ld %>% group_by(key) %>% 
+  summarize(mean = mean(value, na.rm = TRUE),
+            se = sd(value, na.rm = TRUE)/sqrt(sum(!is.na(value)) - 1))
+
+slds <- ld %>% group_by(key) %>% 
+  summarize(mean = weighted.mean(value, WEIGHT3, na.rm = TRUE),
+            se = jtools:::wtd.sd(value, WEIGHT3)/sqrt(1794)) # effective N = 1794
+
+sld$type <- "Unweighted"
+slds$type <- "Weighted"
+
+sl <- bind_rows(sld, slds)
+sl$lci <- sl$mean - 2*sl$se
+sl$uci <- sl$mean + 2*sl$se
+
+slr <- sl[sl$key %in% c("black","hispanic"),]
+slm <- sl[sl$key %in% c("use_facebook","surf_net", "watch_tv"),]
+slh <- sl[sl$key %in% c("cog_fun","engagement"),]
+```
+
+```{r}
+library(ggplot2)
+ggplot(slr, aes(x = key, y = mean, color = type)) + 
+  geom_pointrange(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5),
+                show.legend = FALSE) +
+  theme_bw() + theme(axis.text.x = element_text(size = 12),
+                     axis.title.x = element_blank(), 
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 11),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA))
+```
+
+## Means in our data
+
+```{r}
+ggplot(slm, aes(x = key, y = mean, color = type)) + 
+  geom_pointrange(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5),
+                show.legend = FALSE) +
+  theme_bw() + theme(axis.text.x = element_text(size = 12),
+                     axis.title.x = element_blank(), 
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 11),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA))
+```
+
+## Means in our data
+
+```{r}
+ggplot(slh, aes(x = key, y = mean, color = type)) + 
+  geom_pointrange(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = lci, ymax = uci),
+                  position = position_dodge(width = 0.5),
+                show.legend = FALSE) +
+  theme_bw() + theme(axis.text.x = element_text(size = 12),
+                     axis.title.x = element_blank(), 
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 11),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA))
+```
+
+## Regression analysis
+
+Let's start by looking at unweighted estimates.
+
+R:
+
+```{r eval = FALSE, echo = TRUE}
+lm(cog_fun ~ engagement + watch_tv + surf_net +
+     use_facebook + age + female + educ + black +
+     hispanic, data = raw_data)
+```
+
+Stata:
+
+```
+regress cog_fun engagement watch_tv surf_net ///
+  use_facebook age female educ black hispanic
+```
+
+## Regression analysis
+
+\metroset{block=fill}
+\begin{exampleblock}{R Note}
+You will want to store the model in an object, like this:
+
+\texttt{model <- lm(y \textasciitilde{} x)}
+
+And use the the \texttt{summary} function or similar to inspect the results. 
+
+I'm omitting that code for simplicity in these slides.
+
+\end{exampleblock}
+
+## Regression analysis
+
+```{r results = 'asis'}
+fit <- lm(cog_fun ~ engagement + watch_tv + surf_net +
+          use_facebook + age + female + educ + black + hispanic,
+          data = raw_data)
+fitw <- lm(cog_fun ~ engagement + watch_tv + surf_net +
+          use_facebook + age + female + educ + black + hispanic,
+          data = raw_data, weights = WEIGHT3)
+
+library(texreg)
+tex <- extract(scale_mod(fit, n.sd = 2))
+tex@gof <- tex@gof[1]
+tex@gof.decimal <- tex@gof.decimal[1]
+tex@gof.names <- tex@gof.names[1]
+texreg(tex, custom.coef.map = list("engagement" = "Engagement", 
+                                "watch_tv" = "Watch TV",
+                                "surf_net" = "Surf Web",
+                                "use_facebook" = "Facebook Use",
+                                "age" = "Age"),
+       custom.model.names = c("Unweighted"))
+
+```
+
+```{r}
+fits <- svyglm(cog_fun ~ engagement + watch_tv + surf_net +
+          use_facebook + age + female + educ + black + hispanic,
+                    design = survey_data)
+```
+
+## Regression analysis
+
+```{r}
+plot_summs(fit, scale = TRUE, n.sd = 2,
+           coefs = c("Engagement" = "engagement", 
+                     "Watch TV" = "watch_tv",
+                     "Surf Web" = "surf_net",
+                     "Facebook Use" = "use_facebook",
+                     "Age" = "age",
+                     "Female" = "female",
+                     "Education" = "educ",
+                     "Race (Black)" = "black",
+                     "Ethnicity (Hispanic)" = "hispanic")) +
+  geom_vline(xintercept = -.01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .07, alpha = .2, colour = "grey") +
+  theme_bw() + theme(axis.text.x = element_text(size = 13),
+                       axis.text.y = element_text(size = 13),
+                     axis.title.y = element_blank(), 
+                     axis.title.x = element_text(size = 13),
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 12),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     panel.grid = element_blank()) +
+  ggtitle("Unweighted regression estimates")
+```
+
+## Survey-weighted regression
+
+Now let's account for the weights and survey design:
+
+R:
+
+```{r eval = FALSE, echo = TRUE}
+svyglm(cog_fun ~ engagement + watch_tv + surf_net + 
+         use_facebook + age + female + educ + black + 
+         hispanic, design = survey_data)
+```
+
+Stata: 
+
+```
+svy: regress cog_fun engagement watch_tv surf_net ///
+  use_facebook age female educ black hispanic
+```
+
+## Survey-weighted regression
+
+```{r results = 'asis'}
+fits <- svyglm(cog_fun ~ engagement + watch_tv + surf_net +
+          use_facebook + age + female + educ + black + hispanic,
+                    design = survey_data)
+texs <- extract(scale_mod(fits, n.sd = 2))
+texs@gof <- tex@gof[1]
+texs@gof.decimal <- tex@gof.decimal[1]
+texs@gof.names <- tex@gof.names[1]
+texreg(list(tex, texs), custom.coef.map = list("engagement" = "Engagement", 
+                                "watch_tv" = "Watch TV",
+                                "surf_net" = "Surf Web",
+                                "use_facebook" = "Facebook Use",
+                                "age" = "Age"),
+       custom.model.names = c("Unweighted", "Weighted"))
+```
+
+## Survey-weighted regression
+
+```{r}
+plot_summs(fit, fits, scale = TRUE, n.sd = 2,
+           model.names = c("Unweighted", "Weighted"),
+           coefs = c("Engagement" = "engagement", 
+                     "Watch TV" = "watch_tv",
+                     "Surf Web" = "surf_net",
+                     "Facebook Use" = "use_facebook",
+                     "Age" = "age",
+                     "Female" = "female",
+                     "Education" = "educ",
+                     "Race (Black)" = "black",
+                     "Ethnicity (Hispanic)" = "hispanic")) +
+  geom_vline(xintercept = -.01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .07, alpha = .2, colour = "grey") +
+  theme_bw() + theme(axis.text.x = element_text(size = 13),
+                       axis.text.y = element_text(size = 13),
+                     axis.title.y = element_blank(), 
+                     axis.title.x = element_text(size = 13),
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 13),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     panel.grid = element_blank()) +
+  ggtitle("Weighted vs. unweighted estimates")
+```
+
+## Effect of varaince adjustment
+
+```{r}
+plot_summs(fitw, fits, scale = TRUE, n.sd = 2,
+           model.names = c("OLS SE", "Adjusted SE"),
+           coefs = c("Engagement" = "engagement", 
+                     "Watch TV" = "watch_tv",
+                     "Surf Web" = "surf_net",
+                     "Facebook Use" = "use_facebook",
+                     "Age" = "age",
+                     "Female" = "female",
+                     "Education" = "educ",
+                     "Race (Black)" = "black",
+                     "Ethnicity (Hispanic)" = "hispanic")) +
+  geom_vline(xintercept = -.01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = -.06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .01, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .02, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .03, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .04, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .05, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .06, alpha = .2, colour = "grey") +
+  geom_vline(xintercept = .07, alpha = .2, colour = "grey") +
+  theme_bw() + theme(axis.text.x = element_text(size = 13),
+                       axis.text.y = element_text(size = 13),
+                     axis.title.y = element_blank(), 
+                     axis.title.x = element_text(size = 13),
+                     legend.title = element_blank(),
+                     legend.text = element_text(size = 13),
+                     legend.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     plot.background = element_rect(fill = "transparent", 
+                                                    colour = NA),
+                     panel.grid = element_blank()) +
+  ggtitle("With vs. without SE adjustment")
+```
+
+## Testing ignorability of weights
+
+**Stata**:
+
+`wgttest`
+
+- Test described in DuMouchel and Duncan (1983)
+    - Also discussed in Bollen et al. (2016)
+- Re-fits model with weights as predictor
+    - Interaction term between weights and each predictor
+- $R^2$-change test comparing original and re-fit models
+- Looking at model coefficients can show you which predictors are affected
+- Find at https://ideas.repec.org/c/boc/bocode/s444104.html
+
+```
+wgttest cog_fun engagement watch_tv surf_net ///
+  use_facebook age female educ black hispanic,
+  wgt(WEIGHT3)
+```
+
+## Testing ignorability of weights
+
+**R**:
+
+`wgttest`
+
+- R clone of Stata `wgttest` implemented in `jtools` package
+- Find at https://cran.r-project.org/package=jtools
+
+`pf_sv_test`
+
+- Implements Pfefferman and Sverchkov (1993) bootstrapping procedure
+- Testing correlation between model residuals and weights
+    - Also squared and cubed residuals
+- Also in `jtools` package
+
+## Testing ignorability of weights
+
+```{r echo = TRUE}
+library(jtools)
+fit <- lm(cog_fun ~ engagement + watch_tv + surf_net +
+            use_facebook + age + female + educ + black +
+            hispanic, data = raw_data)
+
+wgttest(fit, weights = WEIGHT3, data = raw_data)
+```
+
+## Testing ignorability of weights
+
+```{r echo = TRUE}
+pf_sv_test(fit, weights = WEIGHT3, data = raw_data)
+```
+
